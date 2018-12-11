@@ -109,8 +109,9 @@
           %% If broadcast rate reaches a level when process cannot consume messages with
           %% enough speed there is a risk that queue could grow without limit. In order
           %% to mitigate this problem process can drop i_have messages when under
-          %% pressure, because those messages are retried if not acked.
-          broadcast_drop_threshold :: non_neg_integer(),
+          %% pressure, because those messages are retried if not acked. If set to zero
+          %% no messages will be dropped.
+          drop_i_have_threshold :: non_neg_integer(),
 
           %% Set of registered modules that may handle messages that
           %% have been broadcast
@@ -262,7 +263,7 @@ init([AllMembers, InitEagers, InitLazys, Mods]) ->
     State1 =  #state{
                  outstanding   = orddict:new(),
                  outstanding_limit =  app_helper:get_env(plumtree, outstanding_limit, 0),
-                 broadcast_drop_threshold =  app_helper:get_env(plumtree, broadcast_drop_threshold, 1000000),
+                 drop_i_have_threshold = app_helper:get_env(plumtree, drop_i_have_threshold, 0),
                  mods = lists:usort(Mods),
                  exchanges=[],
                  mbox_traversal = MBoxTraversal
@@ -333,8 +334,9 @@ handle_cast({update, LocalState}, State=#state{all_members=BroadcastMembers}) ->
 
 %% @private
 -spec prioritise_cast(term(), non_neg_integer(),  #state{}) -> integer() | drop.
-prioritise_cast({i_have, _MsgId, _Mod, _Round, _Root, _From}, Length, _State=#state{broadcast_drop_threshold=Threshold}) ->
-    case Length > Threshold of
+prioritise_cast({i_have, _MsgId, _Mod, _Round, _Root, _From}, Length, _State=#state{drop_i_have_threshold=Threshold}) ->
+    %% return 'drop' atom to ignore message or message priority (default priority is zero)
+    case (Threshold > 0) and (Length > Threshold) of
         true -> drop;
         false -> 0
     end;
